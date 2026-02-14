@@ -21,41 +21,31 @@ import numpy as np
 
 # ── Defaults ────────────────────────────────────────────────────────────────
 DEFAULT_OUTPUT = "great_circle_route.png"
-DEFAULT_DPI = 3000
+DEFAULT_DPI = 1000
 DEFAULT_FIGSIZE = (16, 8)
 DEFAULT_LABEL_MIN_FLIGHTS = 10  # only label airports with >= this many legs
+DEFAULT_AIRPORTS_CSV = Path(__file__).parent / "airports.csv"
 
-# Known airport coordinates: ICAO -> (lat, lon)
-# Add entries here for any airports not yet listed.
-AIRPORT_COORDS = {
-    "CYTR": (44.1189, -77.5281),
-    "KSEA": (47.4502, -122.3088),
-    "EGLL": (51.4775, -0.4614),
-    "GOBD": (14.6707, -17.0733),
-    "LICZ": (37.4017, 14.9222),
-    "CYLT": (82.5178, -62.2806),
-    "CYYC": (51.1225, -114.0133),
-    "CYUL": (45.4706, -73.7408),
-    "CYHZ": (44.8808, -63.5086),
-    "CYQX": (48.9369, -54.5681),
-    "BIKF": (63.9850, -22.6056),
-    "EDDF": (50.0333, 8.5706),
-    "LTBA": (40.9769, 28.8146),
-    "ORBI": (33.2625, 44.2346),
-    "OAKB": (34.5659, 69.2124),
-    "CYMJ": (50.3303, -105.5592),
-    "CYEG": (53.3097, -113.5797),
-    "CYOW": (45.3225, -75.6692),
-    "RJTT": (35.5533, 139.7811),  # Tokyo Haneda
-    "LFPG": (49.0097, 2.5479),  # Paris CDG
-    "CYFB": (63.7561, -68.5558),  # Iqaluit
-    "OMDB": (25.2528, 55.3644),  # Dubai
-    "CYYR": (53.3192, -60.4258),  # Goose Bay
-    "PHNL": (21.3187, -157.9224),  # Honolulu
-    "CYWG": (49.9100, -97.2399),  # Winnipeg
-    "RPLL": (14.5086, 121.0198),  # Manila
-    "PGUA": (13.5840, 144.9298),  # Andersen AFB, Guam
-}
+
+def load_airport_coords(airports_csv):
+    """Load airport coordinates from OurAirports CSV.
+
+    Returns dict: ICAO -> (lat, lon)
+    """
+    coords = {}
+    with open(airports_csv, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            icao = (row.get("icao_code") or row.get("gps_code") or "").strip()
+            if not icao or len(icao) != 4:
+                continue
+            try:
+                lat = float(row["latitude_deg"])
+                lon = float(row["longitude_deg"])
+            except (ValueError, KeyError):
+                continue
+            coords[icao] = (lat, lon)
+    return coords
 
 
 def load_logbook(csv_path):
@@ -139,7 +129,20 @@ def main():
         default=DEFAULT_LABEL_MIN_FLIGHTS,
         help=f"Min flights to show ICAO label (default: {DEFAULT_LABEL_MIN_FLIGHTS})",
     )
+    parser.add_argument(
+        "--airports",
+        type=Path,
+        default=DEFAULT_AIRPORTS_CSV,
+        help=f"Path to OurAirports CSV (default: {DEFAULT_AIRPORTS_CSV.name})",
+    )
     args = parser.parse_args()
+
+    # Load airport database
+    if not args.airports.exists():
+        print(f"Error: {args.airports} not found")
+        sys.exit(1)
+    airport_coords = load_airport_coords(args.airports)
+    print(f"Loaded {len(airport_coords)} airports from {args.airports.name}")
 
     csv_path = args.logbook
     if not csv_path.exists():
@@ -159,7 +162,7 @@ def main():
 
     # Check for missing airport coords
     all_airports = {home} | set(route_counts.keys())
-    missing = all_airports - set(AIRPORT_COORDS.keys())
+    missing = all_airports - set(airport_coords.keys())
     if missing:
         print(f"Warning: no coordinates for {missing} — skipping these routes")
         for code in missing:
@@ -230,11 +233,11 @@ def main():
         spine.set_linewidth(0.8)
     ax.gridlines(draw_labels=False, linewidth=0.3, color="#1e2a45", alpha=0.6)
 
-    home_lat, home_lon = AIRPORT_COORDS[home]
+    home_lat, home_lon = airport_coords[home]
 
     # Draw routes sorted by frequency (dim first, hot on top)
     for dest_code, freq in sorted(route_counts.items(), key=lambda r: r[1]):
-        if dest_code not in AIRPORT_COORDS:
+        if dest_code not in airport_coords:
             continue
         t = freq / max_freq
 
@@ -244,7 +247,7 @@ def main():
         b = int(120 + 135 * (1 - t * 0.3))
         route_color = f"#{r:02x}{g:02x}{b:02x}"
 
-        dest_lat, dest_lon = AIRPORT_COORDS[dest_code]
+        dest_lat, dest_lon = airport_coords[dest_code]
         gc_lats, gc_lons = great_circle_points(
             home_lat,
             home_lon,
@@ -276,10 +279,10 @@ def main():
 
     # Destination markers
     for dest_code, freq in route_counts.items():
-        if dest_code not in AIRPORT_COORDS:
+        if dest_code not in airport_coords:
             continue
         t = freq / max_freq
-        lat, lon = AIRPORT_COORDS[dest_code]
+        lat, lon = airport_coords[dest_code]
         marker_sz = 4 + 6 * t
         ax.plot(
             lon,
