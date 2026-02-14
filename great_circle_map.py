@@ -21,7 +21,7 @@ import numpy as np
 
 # ── Defaults ────────────────────────────────────────────────────────────────
 DEFAULT_OUTPUT = "great_circle_route.png"
-DEFAULT_DPI = 400
+DEFAULT_DPI = 3000
 DEFAULT_FIGSIZE = (16, 8)
 DEFAULT_LABEL_MIN_FLIGHTS = 10  # only label airports with >= this many legs
 
