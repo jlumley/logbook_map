@@ -1,0 +1,12 @@
+[project]
+name = "great-circle-map"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "cartopy",
+    "matplotlib",
+    "numpy",
+]
+
+[project.scripts]
+great-circle-map = "great_circle_map:main"
